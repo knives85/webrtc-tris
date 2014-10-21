@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title>WebRTC Tris</title>
+    <script src='/_ah/channel/jsapi'></script>
+    <script src="resources/js/jquery-2.1.1.min.js" ></script>
+    <style>
+        body {
+            font-family: Verdana, Arial, Sans-serif;
+        }
+        img {
+            width: 100%;
+            height: 100%;
+        }
+        #game_container {
+            width: 400px;
+            height: 400px;
+            border: none;
+        }
+        .box {
+            float: left;
+            width: 30%;
+            height: 30%;
+        }
+        .box-top {
+            border-bottom: 1px solid black;
+        }
+        .box-bottom {
+            border-top: 1px solid black;
+        }
+        .box-center {
+            border-left: 1px solid black;
+            border-right: 1px solid black;
+        }
+        #modal_container {
+            width: 400px;
+            height: 400px;
+            top:0;
+            left:0;
+            position: absolute;
+            background-color: black;
+            opacity: 0.5;
+            color: white;
+            text-align: center;
+            z-index: 4;
+        }
+        #modal_content {
+            font-size: 20pt;
+            width: 100%;
+            height: 1em;
+            margin-top: 50%;
+            z-index: 4;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game_container" style="display: none">
+    <div id="modal_container" style="display: none" >
+        <div id="modal_content" >
+            WAIT YOUR TURN...
+        </div>
+    </div>
+
+
+    <div id="box_1_1" class="box box-top" >
+        <img id="img_1_1" />
+    </div>
+    <div id="box_1_2" class="box box-top box-center" >
+        <img id="img_1_2" /></div>
+    <div id="box_1_3" class="box box-top" >
+        <img id="img_1_3" /></div>
+    <br style="clear: both" >
+    <div id="box_2_1" class="box" >
+        <img id="img_2_1" /></div>
+    <div id="box_2_2" class="box box-center" >
+        <img id="img_2_2" /></div>
+    <div id="box_2_3" class="box" >
+        <img id="img_2_3" /></div>
+    <br style="clear: both" >
+    <div id="box_3_1" class="box box-bottom" >
+        <img id="img_3_1" /></div>
+    <div id="box_3_2" class="box box-bottom box-center" >
+        <img id="img_3_2" /></div>
+    <div id="box_3_3" class="box box-bottom" >
+        <img id="img_3_3" /></div>
+    <br style="clear: both" >
+</div>
+
+Username:&nbsp;<input type="text" id="username" /><br>
+<input id="start_button" type="button" value="Start" />
+<input id="new_game" type="button" value="New Game" style="display: none;" />
+
+<label id="current_game_link"></label>
+
+
+
+<script >
+    var GAME_SERVER_URL = "https://knives-tris-1.appspot.com/";
+    var gameStatus = null;
+    var gamer = ["x", "o"];
+    var counter;
+    var gameEnd = true;
+    var BLANK_CHAR = "B";
+    var blankRegEx = null;
+    var generalRegEx = "([\\w]*[<USER>]{3}[\\w]*|[<USER>][\\w]{4}[<USER>][\\w]{4}[<USER>][\\w]*|[\\w]*[<USER>][\\w]{3}[<USER>][\\w]{3}[<USER>][\\w]*|[\\w]{2}[<USER>][\\w]{2}[<USER>][\\w]{2}[<USER>][\\w]*)";
+    var matchExp = [];
+    var currGame = null;
+    var isDebug = true;
+
+    function appLogger(message) {
+        if (isDebug)
+            console.log(message);
+    }
+
+    function showMessage(message) {
+        $("#modal_content").html(message);
+        $("#modal_container").show();
+    }
+    function hideMessage() {
+        $("#modal_container").hide();
+    }
+
+    function onMessage(m) {
+        alert(m);
+
+    }
+
+    function sendMessage(path, opt_param) {
+        path += '?g=' + currGame.gameKey;
+        if (opt_param) {
+            path += '&' + opt_param;
+        }
+
+        appLogger(path);
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', path, true);
+        xhr.send();
+      };
+
+    function openChannel() {
+        var channel = new goog.appengine.Channel(currGame.token);
+        var handler = {
+            'onopen': function() {},
+            'onmessage': onMessage,
+            'onerror': function() {},
+            'onclose': function() {}
+        };
+        var socket = channel.open(handler);
+        socket.onopen = function() {};
+        socket.onmessage = onMessage;
+    }
+
+    function newGameSuccess(result) {
+        currGame = result;
+        appLogger(currGame);
+
+        $("#current_game_link").html(currGame.gameKey);
+
+        for (var i = 0; i < gamer.length; i++) {
+            matchExp.push(new RegExp(generalRegEx.replace(/<USER>/g, gamer[i])));
+        }
+        blankRegEx = new RegExp(BLANK_CHAR);
+
+        $("#start_button").hide();
+        $("#username").attr("readonly");
+        $("#new_game").show();
+        $("#game_container").show();
+        restartGame();
+        hideMessage();
+
+        openChannel();
+    }
+
+    function init() {
+        var username = $.trim($("#username").val());
+
+        if (username === "") {
+            alert("Specify your username");
+            return;
+        }
+
+        showMessage("INITIALIZING...");
+
+        $.get(GAME_SERVER_URL + "game", {u: $("#username").val()}, newGameSuccess);
+
+
+    }
+
+    function restartGame() {
+        if (!gameEnd) {
+            alert("End the game!");
+            return;
+        }
+        counter = 0;
+        gameEnd = false;
+        gameStatus = [
+                        [BLANK_CHAR, BLANK_CHAR, BLANK_CHAR],
+                        [BLANK_CHAR, BLANK_CHAR, BLANK_CHAR],
+                        [BLANK_CHAR, BLANK_CHAR, BLANK_CHAR]
+                     ];
+        $("img[id^='img']").prop("src", "");
+    }
+
+    function getStatusToString() {
+        var statusString = "";
+        for (var i = 0; i < gameStatus.length; i++) {
+            for (var j = 0; j < gameStatus[i].length; j++) {
+                statusString += gameStatus[i][j];
+            }
+            statusString += "E";
+        }
+
+        return statusString;
+    }
+
+    function checkWinner() {
+        var statusString = getStatusToString();
+
+        var winner = null;
+
+        for (var k = 0; k < gamer.length; k++) {
+            if (matchExp[k].test(statusString)) {
+                winner = gamer[k];
+                break;
+            }
+        }
+
+        if (winner !== null || blankRegEx.exec(statusString)  === null) {
+            gameEnd = true;
+        }
+
+        return winner;
+    }
+
+    function move(row, col) {
+        sendMessage(GAME_SERVER_URL + "game", null);
+        var i = Math.floor(Math.random() * 10) % 3;
+        var degree = 0 + (90 * i);
+        var imgId = "#img_" + row + "_" + col
+        var currUser = gamer[counter % 2];
+        counter++;
+
+        $(imgId).css("-webkit-transform", "rotate(" + degree + "deg)");
+        $(imgId).css("transform", "rotate(" + degree + "deg)");
+        $(imgId).prop("src", "resources/img/sign_" +  currUser + ".png");
+
+        gameStatus[(row-1)][(col-1)] = currUser;
+
+        var winner = checkWinner();
+        if (winner !== null) {
+            alert("User " + winner + " won!!");
+        } else if (gameEnd) {
+            alert("Game Ended, no winner!");
+        }
+
+    }
+    $(document).ready(function() {
+        $("div[id^='box']").click(function(){
+            var splitted = $(this).attr("id").split("_");
+            move(splitted[1], splitted[2]);
+        });
+        $("#start_button").click(init);
+        $("#new_game").click(restartGame);
+    });
+</script>
+</body>
+</html>
